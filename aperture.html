@@ -2,11 +2,15 @@
 <html>
 <head>
 <script type="text/javascript" src="js/paper-full.js"></script>
-<script type="text/paperscript" src="js/aperture-part.js" canvas="myCanvas"></script>
-<script type="text/paperscript" src="js/aperture-animation.js" canvas="myCanvas"></script>
-<script type="text/paperscript" src="js/aperture.js" canvas="myCanvas" data-script-scope="add"></script>
+<script type="text/paperscript" src="js/aperture-part.js" canvas="animation"></script>
+<script type="text/paperscript" src="js/aperture-animation.js" canvas="animation"></script>
+<script type="text/paperscript" src="js/aperture.js" canvas="animation"></script>
+
+<script type="text/paperscript" src="js/aperture-part.js" canvas="detail"></script>
+<script type="text/paperscript" src="js/aperture-detail.js" canvas="detail"></script>
 </head>
 <body>
-	<canvas id="myCanvas" resize></canvas>
+	<canvas id="animation" resize></canvas>
+	<canvas id="detail" resize></canvas>
 </body>
 </html>

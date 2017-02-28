@@ -84,6 +84,16 @@ function offsetPointAroundIdx0(point, totalRotation, dilation) {
 			.rotate(totalRotation * dilation, new Point({angle: 0, length: 1}));
 }
 
+function offsetPartPointAroundIdx0(point, totalRotation, radianWidth, dilation, idx) {
+	var innerEdgeStart = new Point({
+		angle: radianWidth * idx,
+		length: 1
+	});
+	var worldPoint = (point + (innerEdgeStart * -dilation))
+		.rotate(-totalRotation * dilation, innerEdgeStart * (1-dilation));
+	return offsetPointAroundIdx0(worldPoint, totalRotation, dilation);
+}
+
 function openingCenterMovementFunction(totalRotation) {
 	origin = new Point();
 	return function centerAtDilation(dilation) {
@@ -97,13 +107,12 @@ function partOuterEdgeMovementFunction(totalRotation, radianWidth, idx) {
 			angle: radianWidth * (idx + 1),
 			length: 1
 		});
-		var innerEdgeStart = new Point({
-			angle: radianWidth * idx,
-			length: 1
-		});
-		var worldPoint = (outerEdgeStart + (innerEdgeStart * -dilation))
-			.rotate(-totalRotation * dilation, innerEdgeStart * (1-dilation));
-		return offsetPointAroundIdx0(worldPoint, totalRotation, dilation);
+		return offsetPartPointAroundIdx0(
+			outerEdgeStart,
+			totalRotation,
+			radianWidth,
+			dilation,
+			idx);
 	};
 }
 
@@ -158,6 +167,41 @@ function partOuterEdgeOverlap(part, totalRotation, radianWidth, idx, scratchGrou
 	overlap.closed = true;
 	return sweptCircleFromPointFunction(partOuterEdgeMovementFunction(totalRotation, radianWidth, idx -1))
 		.subtract(overlap);
+}
+
+window.buildPieceSweep = function(part, idx, totalRotation, radianWidth) {
+	var localPart = part.clone();
+	localPart.rotate(radianWidth * idx, new Point());
+	var sweepfn = function (point) {
+		return function (dilation) {
+			return offsetPartPointAroundIdx0(
+				point,
+				totalRotation,
+				radianWidth,
+				dilation,
+				idx);
+		};
+	};
+	nChunks = 100;
+	var sweep = null;
+	for (var i = 0; i < nChunks; i++) {
+		var p1 = localPart.getPointAt((localPart.length * i)/nChunks);
+		var p2 = localPart.getPointAt((localPart.length * (i+1))/nChunks);
+		var s1 = Path.Line(p1, p2);
+		s1.parent = scratchPad;
+		var s2 = pathFromPointFunction(sweepfn(p1));
+		var s3 = Path.Line(sweepfn(p2)(1), sweepfn(p1)(1));
+		s3.parent = scratchPad;
+		var s4 = pathFromPointFunction(sweepfn(p2));
+		s4.reverse();
+		var chunk = s1.join(s2).join(s3).join(s4);
+		chunk.closed = true;
+		sweep = (!sweep) ? chunk : sweep.unite(chunk);
+	}
+	localPart.remove();
+	sweep.closed = true;
+	sweep.simplify(0.000001);
+	return sweep;
 }
 
 window.buildPiece = function (nPieces) {
