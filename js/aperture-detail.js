@@ -1,12 +1,11 @@
 window.viewing_scale = 50.0;
 var nParts = 16;
-var piece = window.buildPiece(nParts);
-piece.strokeColor = 'black';
-piece.strokeWidth = 1/(viewing_scale * 2);
-var sweep = window.buildPieceSweep(piece, 2,window.computeRotation(360.0 / nParts), 360.0 / nParts);
-sweep.parent = piece.parent;
-sweep.strokeColor = 'black';
-sweep.strokeWidth = 1/(viewing_scale * 2);
+var pieces = window.buildPiece(nParts);
+for (var i = 0; i < pieces.length; i++) {
+  pieces[i].parent = project.activeLayer;
+  pieces[i].strokeColor = 'black';
+  pieces[i].strokeWidth = 1/(viewing_scale * 2);
+}
 window.scratchPad.remove();
 // {strokeColor: 'black', strokeWidth: 1/viewing_scale}
 view.scale(viewing_scale,new Point());

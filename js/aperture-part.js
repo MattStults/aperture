@@ -33,9 +33,12 @@ window.computeRotation = function (radianWidth) {
 	return offset.angle * 2;
 }
 
-function pathFromPointFunction(fn) {
+function pathFromPointFunction(fn, granularity) {
+	if (!granularity) {
+		granularity = 10;
+	}
 	var segments = [];
-	for (i = 0; i < 11; i++) {
+	for (i = 0; i < (granularity + 1); i++) {
 		segments.push(fn(i/10.0))
 	}
 	var path = new Path({ segments: segments });
@@ -155,7 +158,7 @@ function partOuterEdgeOverlap(part, totalRotation, radianWidth, idx, scratchGrou
 	}).reduce(function(a, b, i, arr) { return (a[1] > b[1]) ? a : b;});
 	// Split the overlap.
 	overlap.splitAt(overlap.getLocationOf(intersectPoint));
-	overlap.removeSegment(1).remove();
+	overlap.removeSegments(overlap.getLocationOf(intersectPoint).index);
 	// Extend it.
 	overlap = overlap.join(new Path([
 		intersectPoint,
@@ -167,6 +170,13 @@ function partOuterEdgeOverlap(part, totalRotation, radianWidth, idx, scratchGrou
 	overlap.closed = true;
 	return sweptCircleFromPointFunction(partOuterEdgeMovementFunction(totalRotation, radianWidth, idx -1))
 		.subtract(overlap);
+}
+
+window.buildLayers = function(part, totalRotation, radianWidth) {
+	return [
+		part.clone().subtract(buildPieceSweep(part,-2, totalRotation, radianWidth)),
+		part.clone().subtract(buildPieceSweep(part,2, totalRotation, radianWidth))
+	];
 }
 
 window.buildPieceSweep = function(part, idx, totalRotation, radianWidth) {
@@ -200,14 +210,13 @@ window.buildPieceSweep = function(part, idx, totalRotation, radianWidth) {
 	}
 	localPart.remove();
 	sweep.closed = true;
-	sweep.simplify(0.000001);
+	sweep.reduce();
+	sweep.parent = scratchPad;
 	return sweep;
 }
 
-window.buildPiece = function (nPieces) {
-	var radianWidth = 360.0 / nPieces;
+window.buildPieceShape = function (nPieces, radianWidth, totalRotation) {
 	var crescent = unitRing(radianWidth, 1).subtract(unitRing(radianWidth, 0));
-	var totalRotation = computeRotation(radianWidth)
 	var extendedPart = crescent.intersect(
 		sweptCircleFromPointFunction(
 			openingCenterMovementFunction(totalRotation)));
@@ -218,4 +227,11 @@ window.buildPiece = function (nPieces) {
 	});
 	part.parent = scratchPad.parent;
 	return part;
+}
+
+window.buildPiece = function (nPieces) {
+	var radianWidth = 360.0 / nPieces;
+	var totalRotation = computeRotation(radianWidth);
+	var piece = buildPieceShape(nPieces, radianWidth, totalRotation);
+	return buildLayers(piece, totalRotation, radianWidth);
 }
