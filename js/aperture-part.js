@@ -173,14 +173,72 @@ function partOuterEdgeOverlap(part, totalRotation, radianWidth, idx, scratchGrou
 }
 
 window.buildLayers = function(part, totalRotation, radianWidth) {
-	return [
-		part.clone().subtract(buildPieceSweep(part,-2, totalRotation, radianWidth)),
-		part.clone().subtract(buildPieceSweep(part,2, totalRotation, radianWidth))
-	];
+	var l1 = part.subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
+	var l2 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
+	return [l1, l2];
+}
+
+function translatePath(path, movementFnFn, scratchGroup) {
+	if (!scratchGroup) {
+		scratchGroup = scratchPad;
+	}
+	var retPath = new Path(path.segments.map(function(seg) {
+		return new Segment(movementFnFn(seg.point)(1), path.handleIn, path.handleOut);
+	}));
+	retPath.parent = scratchGroup;
+	return retPath;
+}
+
+function buildTranslationBox(path, start, stop, movementFnFn, scratchGroup) {
+	if (!scratchGroup) {
+		scratchGroup = scratchPad;
+	}
+	path = path.clone();
+	path.splitAt(stop.offset);
+	path.parent = scratchGroup;
+	boxTop = path.splitAt(start.offset);
+	boxBot = translatePath(boxTop, movementFnFn);
+	boxBot.reverse();
+	boxTtoB = pathFromPointFunction(movementFnFn(boxTop.getPointAt(boxTop.length)));
+	boxBtoT = pathFromPointFunction(movementFnFn(boxTop.getPointAt(0)));
+	boxBtoT.reverse();
+	
+	boxTop.join(boxTtoB).join(boxBot).join(boxBtoT);
+	boxTop.closed = true;
+	boxTop.parent = scratchGroup;
+	return boxTop;
+}
+
+function getTangents(path, granularity) {
+	if (!granularity) {
+		granularity = 201;
+	}
+	return Array.apply(null, Array(granularity))
+	    .map(function (_, i) {return path.getTangentAt(i * path.length / (granularity-1));});
+}
+
+function getNormalsPerpendicularToTangentSpread(path, tangents, epsilon, granularity) {
+	if (!epsilon) {
+		epsilon = 0.001;
+	}
+	if (!granularity) {
+		granularity = 101;
+	}
+	return Array.apply(null, Array(granularity))
+	    .map(function (_, i) {return path.getLocationAt(i * path.length / (granularity-1));})
+	    .filter(function (location) {
+	    	for (var i = 0; i < tangents.length; i++) {
+	    		if (Math.abs(location.normal.dot(tangents[i])) < epsilon) {
+	    			return true;
+	    		}
+	    	}
+	    	return false;
+	    });
 }
 
 window.buildPieceSweep = function(part, idx, totalRotation, radianWidth) {
 	var localPart = part.clone();
+	localPart.parent = scratchPad;
 	localPart.rotate(radianWidth * idx, new Point());
 	var sweepfn = function (point) {
 		return function (dilation) {
@@ -192,26 +250,23 @@ window.buildPieceSweep = function(part, idx, totalRotation, radianWidth) {
 				idx);
 		};
 	};
-	nChunks = 100;
 	var sweep = null;
-	for (var i = 0; i < nChunks; i++) {
-		var p1 = localPart.getPointAt((localPart.length * i)/nChunks);
-		var p2 = localPart.getPointAt((localPart.length * (i+1))/nChunks);
-		var s1 = Path.Line(p1, p2);
-		s1.parent = scratchPad;
-		var s2 = pathFromPointFunction(sweepfn(p1));
-		var s3 = Path.Line(sweepfn(p2)(1), sweepfn(p1)(1));
-		s3.parent = scratchPad;
-		var s4 = pathFromPointFunction(sweepfn(p2));
-		s4.reverse();
-		var chunk = s1.join(s2).join(s3).join(s4);
-		chunk.closed = true;
+	var locations = getNormalsPerpendicularToTangentSpread(
+		localPart,
+		getTangents(
+			pathFromPointFunction(
+				sweepfn(localPart.getPointAt(0)))));
+	for (var i = 0; i < locations.length; i++) {
+		var chunk = buildTranslationBox(localPart, locations[i], locations[(i+1)%locations.length], sweepfn);
 		sweep = (!sweep) ? chunk : sweep.unite(chunk);
+		if (sweep == null) {
+			console.log(chunk);
+		}
 	}
+	sweep = sweep.unite(translatePath(localPart, sweepfn)).unite(localPart);
 	localPart.remove();
 	sweep.closed = true;
 	sweep.reduce();
-	sweep.parent = scratchPad;
 	return sweep;
 }
 
@@ -233,5 +288,6 @@ window.buildPiece = function (nPieces) {
 	var radianWidth = 360.0 / nPieces;
 	var totalRotation = computeRotation(radianWidth);
 	var piece = buildPieceShape(nPieces, radianWidth, totalRotation);
+	piece.parent = scratchPad;
 	return buildLayers(piece, totalRotation, radianWidth);
 }

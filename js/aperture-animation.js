@@ -29,10 +29,10 @@ function display(t) {
 			var p = templatePieces[j].clone();
 			p.parent = displayGroups[i%2][j];
 			if (i%2 == 0) {
-				p.fillColor = j%2 == 0 ? 'red' : 'pink';
+				p.fillColor = j%2 == 0 ? 'rgba(255, 200, 200, 0.75)' : 'rgba(255, 236, 214, 0.75)';
 				p.strokeColor = j%2 == 0 ? 'black' : 'gray';
 			} else {
-				p.fillColor = j%2 == 0 ? 'blue' : 'lightblue';
+				p.fillColor = j%2 == 0 ? 'rgba(200, 200, 255, 0.75)' : 'rgba(214, 236, 255, 0.75)';
 				p.strokeColor = j%2 == 0 ? 'black' : 'gray';
 			}
 			p.strokeWidth = 1/(viewing_scale * 2);
