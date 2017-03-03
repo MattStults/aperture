@@ -155,10 +155,9 @@ function partOuterEdgeOverlap(part, totalRotation, radianWidth, idx, scratchGrou
 	// We want the earliest intersection with the piece.
 	var intersectPoint = getExtremes(overlap).map(function(i) {
 		return i.point;
-	}).reduce(function(a, b, i, arr) { return (a[1] > b[1]) ? a : b;});
+	}).reduce(function(a, b, i, arr) { return (a.y > b.y) ? a : b;});
 	// Split the overlap.
 	overlap.splitAt(overlap.getLocationOf(intersectPoint));
-	overlap.removeSegments(overlap.getLocationOf(intersectPoint).index);
 	// Extend it.
 	overlap = overlap.join(new Path([
 		intersectPoint,
@@ -172,9 +171,24 @@ function partOuterEdgeOverlap(part, totalRotation, radianWidth, idx, scratchGrou
 		.subtract(overlap);
 }
 
-window.buildLayers = function(part, totalRotation, radianWidth) {
+window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius) {
+	if(!pivotRadius) {
+		pivotRadius = 0.05;
+	}
 	var l1 = part.subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
 	var l2 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
+	var leftLocation = getExtremes(l2)
+		.reduce(function(a, b, i, arr) {
+			return (a.point.x < b.point.x) ? a : b;
+		});
+	var pivotPoint = leftLocation.point + leftLocation.normal * pivotRadius * 0.5;
+	l1 = l1.unite(new Path.Circle({
+		center: pivotPoint,
+		radius: pivotRadius,
+		parent: scratchPad
+	}));
+	l1 = l1.subtract(buildPieceCircleSweep(pivotRadius, pivotPoint, -1, totalRotation, radianWidth));
+	l1 = l1.subtract(buildPieceCircleSweep(pivotRadius, pivotPoint, -2, totalRotation, radianWidth));
 	return [l1, l2];
 }
 
@@ -211,7 +225,7 @@ function buildTranslationBox(path, start, stop, movementFnFn, scratchGroup) {
 
 function getTangents(path, granularity) {
 	if (!granularity) {
-		granularity = 201;
+		granularity = 101;
 	}
 	return Array.apply(null, Array(granularity))
 	    .map(function (_, i) {return path.getTangentAt(i * path.length / (granularity-1));});
@@ -219,7 +233,7 @@ function getTangents(path, granularity) {
 
 function getNormalsPerpendicularToTangentSpread(path, tangents, epsilon, granularity) {
 	if (!epsilon) {
-		epsilon = 0.001;
+		epsilon = 0.005;
 	}
 	if (!granularity) {
 		granularity = 101;
@@ -234,6 +248,18 @@ function getNormalsPerpendicularToTangentSpread(path, tangents, epsilon, granula
 	    	}
 	    	return false;
 	    });
+}
+
+function buildPieceCircleSweep(radius, startPoint, idx, totalRotation, radianWidth) {
+	function movefn(dilation) {
+		return offsetPartPointAroundIdx0(
+			startPoint.rotate(radianWidth * idx, new Point()),
+			totalRotation,
+			radianWidth,
+			dilation,
+			idx);
+	};
+	return sweptCircleFromPointFunction(movefn, radius);
 }
 
 window.buildPieceSweep = function(part, idx, totalRotation, radianWidth) {
