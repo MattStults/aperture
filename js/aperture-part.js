@@ -171,25 +171,37 @@ function partOuterEdgeOverlap(part, totalRotation, radianWidth, idx, scratchGrou
 		.subtract(overlap);
 }
 
-window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius) {
+window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius) {
 	if(!pivotRadius) {
-		pivotRadius = 0.05;
+		pivotRadius = 0.04;
+	}
+	if(!capRadius) {
+		capRadius = 0.06;
 	}
 	var l1 = part.subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
-	var l2 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
-	var leftLocation = getExtremes(l2)
+	var l3 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
+	var leftLocation = getExtremes(l3)
 		.reduce(function(a, b, i, arr) {
 			return (a.point.x < b.point.x) ? a : b;
 		});
-	var pivotPoint = leftLocation.point + leftLocation.normal * pivotRadius * 0.5;
-	l1 = l1.unite(new Path.Circle({
+	var pivotPoint = leftLocation.point;/* + leftLocation.normal * pivotRadius * 0.5;*/
+	var pivot = new Path.Circle({
 		center: pivotPoint,
 		radius: pivotRadius,
-		parent: scratchPad
-	}));
+		parent: scratchPad,
+		pivot: l1.pivot
+	});
+	var pivotCap = new Path.Circle({
+		center: pivotPoint,
+		radius: capRadius,
+		parent: scratchPad,
+		pivot: l1.pivot
+	});
+	l1 = l1.unite(pivot);
 	l1 = l1.subtract(buildPieceCircleSweep(pivotRadius, pivotPoint, -1, totalRotation, radianWidth));
 	l1 = l1.subtract(buildPieceCircleSweep(pivotRadius, pivotPoint, -2, totalRotation, radianWidth));
-	return [l1, l2];
+	var l2 = l3.subtract(buildPieceCircleSweep(capRadius, pivotPoint, -1, totalRotation, radianWidth));
+	return [[-2, pivotCap], [-1, pivot], [0, l1], [1, l2],[2, l3]];
 }
 
 function translatePath(path, movementFnFn, scratchGroup) {
