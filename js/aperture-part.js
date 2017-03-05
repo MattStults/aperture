@@ -171,39 +171,6 @@ function partOuterEdgeOverlap(part, totalRotation, radianWidth, idx, scratchGrou
 		.subtract(overlap);
 }
 
-window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius) {
-	if(!pivotRadius) {
-		pivotRadius = 0.04;
-	}
-	if(!capRadius) {
-		capRadius = 0.06;
-	}
-	var l1 = part.subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
-	var l3 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
-	var leftLocation = getExtremes(l3)
-		.reduce(function(a, b, i, arr) {
-			return (a.point.x < b.point.x) ? a : b;
-		});
-	var pivotPoint = leftLocation.point;/* + leftLocation.normal * pivotRadius * 0.5;*/
-	var pivot = new Path.Circle({
-		center: pivotPoint,
-		radius: pivotRadius,
-		parent: scratchPad,
-		pivot: l1.pivot
-	});
-	var pivotCap = new Path.Circle({
-		center: pivotPoint,
-		radius: capRadius,
-		parent: scratchPad,
-		pivot: l1.pivot
-	});
-	l1 = l1.unite(pivot);
-	l1 = l1.subtract(buildPieceCircleSweep(pivotRadius, pivotPoint, -1, totalRotation, radianWidth));
-	l1 = l1.subtract(buildPieceCircleSweep(pivotRadius, pivotPoint, -2, totalRotation, radianWidth));
-	var l2 = l3.subtract(buildPieceCircleSweep(capRadius, pivotPoint, -1, totalRotation, radianWidth));
-	return [[-2, pivotCap], [-1, pivot], [0, l1], [1, l2],[2, l3]];
-}
-
 function translatePath(path, movementFnFn, scratchGroup) {
 	if (!scratchGroup) {
 		scratchGroup = scratchPad;
@@ -328,4 +295,78 @@ window.buildPiece = function (nPieces) {
 	var piece = buildPieceShape(nPieces, radianWidth, totalRotation);
 	piece.parent = scratchPad;
 	return buildLayers(piece, totalRotation, radianWidth);
+}
+
+window.buildAnularLayers = function(nPieces) {
+	var radianWidth = 360.0 / nPieces;
+	var totalRotation = computeRotation(radianWidth);
+	var piece = buildPieceShape(nPieces, radianWidth, totalRotation);
+	piece.parent = scratchPad;
+	var templatePieces = buildLayers(piece, totalRotation, radianWidth);
+	return annularDisplay(0, templatePieces, nPieces, totalRotation);
+}
+
+window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius) {
+	if(!pivotRadius) {
+		pivotRadius = 0.06;
+	}
+	if(!capRadius) {
+		capRadius = 0.08;
+	}
+	var l1 = part.subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
+	var l3 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
+	var leftLocation = getExtremes(l3)
+		.reduce(function(a, b, i, arr) {
+			return (a.point.x < b.point.x) ? a : b;
+		});
+	var pivotPoint = leftLocation.point;/* + leftLocation.normal * pivotRadius * 0.5;*/
+	var pivot = new Path.Circle({
+		center: pivotPoint,
+		radius: pivotRadius,
+		parent: scratchPad,
+		pivot: l1.pivot
+	});
+	var pivotCap = new Path.Circle({
+		center: pivotPoint,
+		radius: capRadius,
+		parent: scratchPad,
+		pivot: l1.pivot
+	});
+	l1 = l1.unite(pivot);
+	l1 = l1.subtract(buildPieceCircleSweep(pivotRadius, pivotPoint, -1, totalRotation, radianWidth));
+	l1 = l1.subtract(buildPieceCircleSweep(pivotRadius, pivotPoint, -2, totalRotation, radianWidth));
+	var l2 = l3.subtract(buildPieceCircleSweep(capRadius, pivotPoint, -1, totalRotation, radianWidth));
+	return [[-2, pivotCap], [-1, pivot], [0, l1], [1, l2],[2, l3]];
+}
+
+window.annularDisplay = function(t, templatePieces, pieceCount, totalRotation) {
+	var displayGroups = [];
+	for (var i = 0; i < 2*(templatePieces.length); i++) {
+		displayGroups[i] = new Group();
+	}
+	var center = new Point();
+	var radianWidth = 360.0 / pieceCount;
+	for (var i = 0; i < pieceCount; i++) {
+		for (var j = 0; j < templatePieces.length; j++) {
+			var groupId = templatePieces[j][0];
+			var layerId = templatePieces.length + ((i%2) ? groupId + 1: -groupId);
+			var p = templatePieces[j][1].clone();
+			p.parent = displayGroups[layerId];
+			if (i%2 == 0) {
+				p.fillColor = j%2 == 0 ? 'rgba(255, 200, 200, 0.75)' : 'rgba(255, 236, 214, 0.75)';
+				p.strokeColor = j%2 == 0 ? 'black' : 'gray';
+			} else {
+				p.fillColor = j%2 == 0 ? 'rgba(200, 200, 255, 0.75)' : 'rgba(214, 236, 255, 0.75)';
+				p.strokeColor = j%2 == 0 ? 'black' : 'gray';
+			}
+			p.strokeWidth = 1/(viewing_scale * 2);
+			p.rotate(-i * radianWidth, center);
+			p.position = new Point({
+				angle: -radianWidth * i,
+				length: 1-t
+			});
+			p.rotate(-totalRotation * t);
+		}
+	}
+	return displayGroups;
 }

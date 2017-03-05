@@ -1,12 +1,9 @@
 window.viewing_scale = 50.0;
 var nParts = 16;
-var pieces = window.buildPiece(nParts);
-var maxLayer = 0;
-for (var i = 0; i < pieces.length; i++) {
-  pieces[i][1].parent = project.activeLayer;
-  pieces[i][1].strokeColor = 'black';
-  pieces[i][1].strokeWidth = 1/(viewing_scale * 2);
-  maxLayer = Math.max(maxLayer, pieces[i][0]);
+var layers = window.buildAnularLayers(nParts);
+console.log(layers.length);
+for (var i = 0; i < layers.length; i++) {
+  layers[i].position.y = i * 2.5;
 }
 window.scratchPad.remove();
 // {strokeColor: 'black', strokeWidth: 1/viewing_scale}
