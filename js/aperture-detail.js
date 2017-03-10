@@ -1,32 +1,13 @@
-window.viewing_scale = 100.0;
-var nParts = 16;
-var layers = window.buildAnularLayers(nParts);
-window.scratchPad.remove();
-new Path.Circle({
-    center: new Point(),
-    radius: 1,
-    name: 'scale_circle',
-    fillColor: 'rgba(255, 255, 255, 0.001)',
-    strokeColor: 'black',
-    strokeWidth: (1 / window.viewing_scale)
-  });
-view.scale(viewing_scale,new Point());
-// Create a circle that will allow us to scale this correctly when it gets into blender.
-
-
-// Setup download
 paper.install(window);
 //currently name doesn't seem to work in some browsers.
 //Save SVG from paper.js as a file.
-var buildGroupForBlender = function() {
+var buildForBlender = function() {
   window.scratchPad = new Group();
-  var group = new Group();
   var nParts = 16;
   var layers = window.buildAnularLayers(nParts);
   for (var i = 0; i < layers.length; i++) {
-    layers[i].parent = group;
+    layers[i].parent = project.activeLayer;
   }
-  window.scratchPad.remove();
   new Path.Circle({
       center: new Point(),
       radius: 1,
@@ -34,21 +15,16 @@ var buildGroupForBlender = function() {
       fillColor: 'rgba(255, 255, 255, 0.001)',
       strokeColor: 'black',
       strokeWidth: (1 / window.viewing_scale),
-      parent: group
+      parent: project.activeLayer
     });
-  return group;
+  window.scratchPad.remove();
 }
 
-var buildGroupForLaser = function() {
+var buildForLaser = function() {
   window.scratchPad = new Group();
-  var group = new Group();
   var nParts = 16;
-  var layers = window.buildAnularLayers(nParts);
-  for (var i = 0; i < layers.length; i++) {
-    layers[i].parent = group;
-  }
+  var layers = window.buildLaserLayers(nParts);
   window.scratchPad.remove();
-  return group;
 }
 
 var downloadAsSVG = function (fileName) {
@@ -69,11 +45,16 @@ t = new Tool();
 t.onKeyUp = function(event) {
   if(event.character == "B") {
     project.activeLayer.removeChildren();
-    buildGroupForBlender();
+    buildForBlender();
     downloadAsSVG("aperture");
   } else if (event.character == "L") {
     project.activeLayer.removeChildren();
-    buildGroupForLaser();
+    buildForLaser();
     downloadAsSVG("aperture_for_laser");
   }
 }
+
+
+window.viewing_scale = 100.0;
+buildForLaser();
+view.scale(viewing_scale,new Point());

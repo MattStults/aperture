@@ -306,6 +306,28 @@ window.buildAnularLayers = function(nPieces) {
 	return annularDisplay(0, templatePieces, nPieces, totalRotation);
 }
 
+window.buildLaserLayers = function(nPieces) {
+	var radianWidth = 360.0 / nPieces;
+	var totalRotation = computeRotation(radianWidth);
+	var piece = buildPieceShape(nPieces, radianWidth, totalRotation);
+	piece.parent = scratchPad;
+	var templatePieces = buildLayers(piece, totalRotation, radianWidth);
+	for (var i = 0; i < templatePieces.length; i++) {
+		var layerPath = templatePieces[i][1];
+		layerPath.parent = project.activeLayer;
+		layerPath.strokeColor = 'rgba(0, 0, 0, 1)';
+		layerPath.strokeWidth = (1 / window.viewing_scale);
+		if (i == 0 || i == 1) {
+		  layerPath.translate(new Point(0.25,0));
+		} else if (i == 2 || i == 3) {
+		  layerPath.translate(new Point(0.5,0));
+		} else if (i == 4) {
+		  layerPath.translate(new Point(1,0));
+		}
+	}
+	return templatePieces;
+}
+
 window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius, minWidth, minClearance) {
 	if(!pivotRadius) {
 		pivotRadius = 0.04;
@@ -325,7 +347,7 @@ window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, cap
 		.reduce(function(a, b, i, arr) {
 			return (a.point.x < b.point.x) ? a : b;
 		});
-	var pivotPoint = leftLocation.point + leftLocation.normal * (capRadius + minWidth * 2);
+	var pivotPoint = leftLocation.point + leftLocation.normal * (capRadius + minWidth + minClearance);
 	var pivot = new Path.Circle({
 		center: pivotPoint,
 		radius: pivotRadius,
@@ -343,12 +365,13 @@ window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, cap
 	var l1Arm = sweptCircleFromPointFunction(function(t) {
 		return leftLocation.point + (pivotPoint - leftLocation.point) * t;
 	}, pivotRadius);
-	var l1 = part.unite(l1Arm);
+	var safetyFill1 = buildPieceCircleSweep(capRadius+minClearance+minWidth, pivotPoint, -1, totalRotation, radianWidth);
+	var l1 = part.unite(l1Arm).unite(safetyFill1);
 	l1Groove = l1Groove.unite(buildPieceCircleSweep(pivotRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth))
 		.unite(buildPieceSweep(l1Arm,-2, totalRotation, radianWidth));
 	l1 = l1.subtract(l1Groove);
 	l1.name = 'bottom';
-	var l2 = l3.subtract(l1Groove)
+	var l2 = l3.unite(safetyFill1).subtract(l1Groove)
 		.subtract(buildPieceCircleSweep(capRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth));
 	l2.name = 'cap_groove';
 	l3.name = 'top';
