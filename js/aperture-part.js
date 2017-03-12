@@ -178,6 +178,7 @@ function translatePath(path, movementFnFn, scratchGroup) {
 	var retPath = new Path(path.segments.map(function(seg) {
 		return new Segment(movementFnFn(seg.point)(1), path.handleIn, path.handleOut);
 	}));
+	retPath.closed = path.closed;
 	retPath.parent = scratchGroup;
 	return retPath;
 }
@@ -207,26 +208,28 @@ function getTangents(path, granularity) {
 		granularity = 101;
 	}
 	return Array.apply(null, Array(granularity))
-	    .map(function (_, i) {return path.getTangentAt(i * path.length / (granularity-1));});
+		.map(function (_, i) {return path.getTangentAt(i * path.length / (granularity-1));});
 }
 
 function getNormalsPerpendicularToTangentSpread(path, tangents, epsilon, granularity) {
 	if (!epsilon) {
-		epsilon = 0.005;
+		epsilon = 0.01;
 	}
 	if (!granularity) {
-		granularity = 101;
+		granularity = 151;
 	}
 	return Array.apply(null, Array(granularity))
-	    .map(function (_, i) {return path.getLocationAt(i * path.length / (granularity-1));})
-	    .filter(function (location) {
-	    	for (var i = 0; i < tangents.length; i++) {
-	    		if (Math.abs(location.normal.dot(tangents[i])) < epsilon) {
-	    			return true;
-	    		}
-	    	}
-	    	return false;
-	    });
+		.map(function (_, i) {
+			return path.getLocationAt(Math.min(path.length, i * path.length / (granularity-1)));
+		})
+		.filter(function (location) {
+			for (var i = 0; i < tangents.length; i++) {
+				if (Math.abs(location.normal.dot(tangents[i])) < epsilon) {
+					return true;
+				}
+			}
+			return false;
+		});
 }
 
 function buildPieceCircleSweep(radius, startPoint, idx, totalRotation, radianWidth) {
@@ -262,10 +265,10 @@ window.buildPieceSweep = function(part, idx, totalRotation, radianWidth) {
 			pathFromPointFunction(
 				sweepfn(localPart.getPointAt(0)))));
 	for (var i = 0; i < locations.length; i++) {
-		var chunk = buildTranslationBox(localPart, locations[i], locations[(i+1)%locations.length], sweepfn);
+		var chunk = buildTranslationBox(localPart, locations[i], locations[(i+2)%locations.length], sweepfn);
 		sweep = (!sweep) ? chunk : sweep.unite(chunk);
 		if (sweep == null) {
-			console.log(chunk);
+			throw "Bad chunk united to null: " + chunk;
 		}
 	}
 	sweep = sweep.unite(translatePath(localPart, sweepfn)).unite(localPart);
@@ -312,18 +315,19 @@ window.buildLaserLayers = function(nPieces) {
 	var piece = buildPieceShape(nPieces, radianWidth, totalRotation);
 	piece.parent = scratchPad;
 	var templatePieces = buildLayers(piece, totalRotation, radianWidth);
+	var layerTokens = [];
 	for (var i = 0; i < templatePieces.length; i++) {
 		var layerPath = templatePieces[i][1];
+		var layerToken = layerPath.name.split("_")[0];
+		var layer = layerTokens.indexOf(layerToken);
+		if (layer < 0) {
+			layer = layerTokens.length;
+			layerTokens.push(layerToken);
+		}
+		layerPath.translate(new Point((layer + 1) * 0.3,0));
 		layerPath.parent = project.activeLayer;
 		layerPath.strokeColor = 'rgba(0, 0, 0, 1)';
 		layerPath.strokeWidth = (1 / window.viewing_scale);
-		if (i == 0 || i == 1) {
-		  layerPath.translate(new Point(0.25,0));
-		} else if (i == 2 || i == 3) {
-		  layerPath.translate(new Point(0.5,0));
-		} else if (i == 4) {
-		  layerPath.translate(new Point(1,0));
-		}
 	}
 	return templatePieces;
 }
@@ -341,9 +345,7 @@ window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, cap
 	if(!minClearance) {
 		minClearance = 0.01;
 	}
-	var l1Groove = buildPieceSweep(part,-2, totalRotation, radianWidth);
-	var l3 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
-	var leftLocation = getExtremes(l3)
+	var leftLocation = getExtremes(part)
 		.reduce(function(a, b, i, arr) {
 			return (a.point.x < b.point.x) ? a : b;
 		});
@@ -365,17 +367,19 @@ window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, cap
 	var l1Arm = sweptCircleFromPointFunction(function(t) {
 		return leftLocation.point + (pivotPoint - leftLocation.point) * t;
 	}, pivotRadius);
-	var safetyFill1 = buildPieceCircleSweep(capRadius+minClearance+minWidth, pivotPoint, -1, totalRotation, radianWidth);
-	var l1 = part.unite(l1Arm).unite(safetyFill1);
-	l1Groove = l1Groove.unite(buildPieceCircleSweep(pivotRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth))
-		.unite(buildPieceSweep(l1Arm,-2, totalRotation, radianWidth));
-	l1 = l1.subtract(l1Groove);
-	l1.name = 'bottom';
-	var l2 = l3.unite(safetyFill1).subtract(l1Groove)
-		.subtract(buildPieceCircleSweep(capRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth));
-	l2.name = 'cap_groove';
-	l3.name = 'top';
-	return [[-2, pivotCap], [-1, pivot], [0, l1], [1, l2],[2, l3]];
+	part = part.clone()
+		.unite(l1Arm)
+		.unite(buildPieceCircleSweep(capRadius+minClearance+minWidth, pivotPoint, -1, totalRotation, radianWidth));
+	var l4 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
+	var l3 = part.clone().subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
+	var pivotGroove = buildPieceCircleSweep(pivotRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth);
+	l1 = l3.subtract(pivotGroove);
+	l1.name = 'bottom_pivot_groove';
+	var l2 = l1.subtract(buildPieceCircleSweep(capRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth));
+	l2.name = 'bottom_cap_groove';
+	l3.name = 'bottom_cover'
+	l4.name = 'top';
+	return [[-2, pivotCap], [-1, pivot], [0, l1], [1, l2],[2, l3], [3, l4]];
 }
 
 window.annularDisplay = function(t, templatePieces, pieceCount, totalRotation) {
