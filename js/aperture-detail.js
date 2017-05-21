@@ -3,7 +3,6 @@ paper.install(window);
 //Save SVG from paper.js as a file.
 var buildForBlender = function() {
   window.scratchPad = new Group();
-  var nParts = 16;
   var layers = window.buildAnularLayers(nParts);
   for (var i = 0; i < layers.length; i++) {
     layers[i].parent = project.activeLayer;
@@ -15,6 +14,7 @@ var buildForBlender = function() {
       fillColor: 'rgba(255, 255, 255, 0.001)',
       strokeColor: 'black',
       strokeWidth: (1 / window.viewing_scale),
+      data: computeRotation(360.0 / nParts),
       parent: project.activeLayer
     });
   window.scratchPad.remove();
@@ -22,7 +22,6 @@ var buildForBlender = function() {
 
 var buildForLaser = function() {
   window.scratchPad = new Group();
-  var nParts = 16;
   var layers = window.buildLaserLayers(nParts);
   window.scratchPad.remove();
 }

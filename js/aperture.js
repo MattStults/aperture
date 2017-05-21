@@ -1,5 +1,5 @@
 window.viewing_scale = 50.0;
-var nParts = 16;
+window.nParts = 18;
 var piece = window.buildPiece(nParts);
 window.animate(piece, nParts);
 window.scratchPad.remove();

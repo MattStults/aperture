@@ -216,7 +216,7 @@ function getNormalsPerpendicularToTangentSpread(path, tangents, epsilon, granula
 		epsilon = 0.01;
 	}
 	if (!granularity) {
-		granularity = 151;
+		granularity = 200;
 	}
 	return Array.apply(null, Array(granularity))
 		.map(function (_, i) {
@@ -315,21 +315,19 @@ window.buildLaserLayers = function(nPieces) {
 	var piece = buildPieceShape(nPieces, radianWidth, totalRotation);
 	piece.parent = scratchPad;
 	var templatePieces = buildLayers(piece, totalRotation, radianWidth);
-	var layerTokens = [];
-	for (var i = 0; i < templatePieces.length; i++) {
-		var layerPath = templatePieces[i][1];
-		var layerToken = layerPath.name.split("_")[0];
-		var layer = layerTokens.indexOf(layerToken);
-		if (layer < 0) {
-			layer = layerTokens.length;
-			layerTokens.push(layerToken);
-		}
-		layerPath.translate(new Point((layer + 1) * 0.3,0));
-		layerPath.parent = project.activeLayer;
-		layerPath.strokeColor = 'rgba(0, 0, 0, 1)';
-		layerPath.strokeWidth = (1 / window.viewing_scale);
-	}
-	return templatePieces;
+	var layers = annularDisplay(0, templatePieces, nPieces, totalRotation);
+	return layers;
+}
+
+function getPiecePartDepths(minWidth, minClearance) {
+	return {
+		pivot_cap: minWidth, // Taper to pivot.
+		pivot: minWidth + Math.max(minClearance, distanceToCap), // straight to pivot_groove
+		bottom_pivot_groove: minWidth, // Taper to cap_groove
+		bottom_cap_groove: minWidth + minClearance + Math.max([minClearance, distanceToGroove, distanceToCap]),
+		bottom_cover: minWidth,
+		top: minWidth
+	};
 }
 
 window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius, minWidth, minClearance) {
