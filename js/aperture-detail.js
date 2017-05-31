@@ -3,7 +3,7 @@ paper.install(window);
 //Save SVG from paper.js as a file.
 var buildForBlender = function() {
   window.scratchPad = new Group();
-  var layers = window.buildAnularLayers(nParts);
+  var layers = window.buildBlenderLayers(nParts);
   for (var i = 0; i < layers.length; i++) {
     layers[i].parent = project.activeLayer;
   }

@@ -300,13 +300,13 @@ window.buildPiece = function (nPieces) {
 	return buildLayers(piece, totalRotation, radianWidth);
 }
 
-window.buildAnularLayers = function(nPieces) {
+window.buildBlenderLayers = function(nPieces) {
 	var radianWidth = 360.0 / nPieces;
 	var totalRotation = computeRotation(radianWidth);
 	var piece = buildPieceShape(nPieces, radianWidth, totalRotation);
 	piece.parent = scratchPad;
-	var templatePieces = buildLayers(piece, totalRotation, radianWidth);
-	return annularDisplay(0, templatePieces, nPieces, totalRotation);
+	var templatePieces = buildBlenderPieceLayers(piece, totalRotation, radianWidth);
+	return annularDisplay(0, templatePieces, 1, totalRotation);
 }
 
 window.buildLaserLayers = function(nPieces) {
@@ -328,6 +328,83 @@ function getPiecePartDepths(minWidth, minClearance) {
 		bottom_cover: minWidth,
 		top: minWidth
 	};
+}
+
+window.buildBlenderPieceLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius, minWidth, minClearance) {
+	if(!pivotRadius) {
+		pivotRadius = 0.04;
+	}
+	if(!capRadius) {
+		capRadius = 0.06;
+	}
+	if(!minWidth) {
+		minWidth = 0.02;
+	}
+	if(!minClearance) {
+		minClearance = 0.01;
+	}
+
+	var leftLocation = getExtremes(part)
+		.reduce(function(a, b, i, arr) {
+			return (a.point.x < b.point.x) ? a : b;
+		});
+	var pivotPoint = leftLocation.point + leftLocation.normal * (capRadius + minWidth + minClearance);
+	var pivotFloor = new Path.Circle({
+		center: pivotPoint,
+		radius: pivotRadius,
+		parent: scratchPad,
+		pivot: part.pivot,
+		name: 'pivot.00'
+	});
+	var pivotCeil = pivotFloor.clone();
+	pivotCeil.name = 'pivot.01';
+	var pivotCapFloor = new Path.Circle({
+		center: pivotPoint,
+		radius: capRadius,
+		parent: scratchPad,
+		pivot: part.pivot,
+		name: 'pivot.02'
+	});
+	var pivotCapMid = pivotCapFloor.clone();
+	pivotCapMid.name = 'pivot.03';
+	var pivotCapCeil = pivotFloor.clone();
+	pivotCapCeil.name = 'pivot.04';
+	var l1Arm = sweptCircleFromPointFunction(function(t) {
+		return leftLocation.point + (pivotPoint - leftLocation.point) * t;
+	}, pivotRadius);
+	part = part.clone()
+		.unite(l1Arm)
+		.unite(buildPieceCircleSweep(capRadius+minClearance+minWidth, pivotPoint, -1, totalRotation, radianWidth));
+	var top = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
+	top.name = 'top';
+	var bottomFloor = part.clone().subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
+	bottomFloor.name = 'bottom.00';
+	var bottomCeil = bottomFloor.clone();
+	bottomCeil.name = 'bottom.01';
+	var pivotGrooveCeil = buildPieceCircleSweep(pivotRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth);
+	pivotGrooveCeil.center = pivotPoint;
+	pivotGrooveCeil.pivot = part.pivot;
+	pivotGrooveCeil.name = 'bottom.02';
+	var pivotGrooveFloor = pivotGrooveCeil.clone();
+	pivotGrooveFloor.name = 'bottom.03';
+	var capGrooveCeil = buildPieceCircleSweep(capRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth);
+	capGrooveCeil.center = pivotPoint;
+	capGrooveCeil.pivot = part.pivot;
+	capGrooveCeil.name = 'bottom.04';
+	var capGrooveFloor =capGrooveCeil.clone();
+	capGrooveFloor.name = 'bottom.05';
+	return [
+		[0, bottomFloor],
+		[5, bottomCeil],
+		[5, pivotGrooveCeil],
+		[4, pivotGrooveFloor],
+		[3, capGrooveCeil],
+		[1, capGrooveFloor],
+		[4, pivotFloor],
+		[6, pivotCeil],
+		[7, pivotCapFloor],
+		[8, pivotCapMid],
+		[9, pivotCapCeil]];
 }
 
 window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius, minWidth, minClearance) {
