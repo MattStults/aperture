@@ -330,18 +330,21 @@ function getPiecePartDepths(minWidth, minClearance) {
 	};
 }
 
-window.buildBlenderPieceLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius, minWidth, minClearance) {
+window.buildBlenderPieceLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius, minWidth, minClearance, shrinkage) {
 	if(!pivotRadius) {
 		pivotRadius = 0.04;
 	}
 	if(!capRadius) {
-		capRadius = 0.06;
+		capRadius = 0.065;
 	}
 	if(!minWidth) {
 		minWidth = 0.02;
 	}
 	if(!minClearance) {
-		minClearance = 0.01;
+		minClearance = 0.02;
+	}
+	if(!shrinkage) {
+		shrinkage = 0.04
 	}
 
 	var leftLocation = getExtremes(part)
@@ -351,7 +354,7 @@ window.buildBlenderPieceLayers = function(part, totalRotation, radianWidth, pivo
 	var pivotPoint = leftLocation.point + leftLocation.normal * (capRadius + minWidth + minClearance);
 	var pivotFloor = new Path.Circle({
 		center: pivotPoint,
-		radius: pivotRadius,
+		radius: pivotRadius * (1.0 - shrinkage),
 		parent: scratchPad,
 		pivot: part.pivot,
 		name: 'pivot.00'
@@ -360,51 +363,45 @@ window.buildBlenderPieceLayers = function(part, totalRotation, radianWidth, pivo
 	pivotCeil.name = 'pivot.01';
 	var pivotCapFloor = new Path.Circle({
 		center: pivotPoint,
-		radius: capRadius,
+		radius: capRadius * (1.0 - shrinkage),
 		parent: scratchPad,
 		pivot: part.pivot,
 		name: 'pivot.02'
 	});
-	var pivotCapMid = pivotCapFloor.clone();
-	pivotCapMid.name = 'pivot.03';
-	var pivotCapCeil = pivotFloor.clone();
-	pivotCapCeil.name = 'pivot.04';
 	var l1Arm = sweptCircleFromPointFunction(function(t) {
 		return leftLocation.point + (pivotPoint - leftLocation.point) * t;
 	}, pivotRadius);
 	part = part.clone()
 		.unite(l1Arm)
-		.unite(buildPieceCircleSweep(capRadius+minClearance+minWidth, pivotPoint, -1, totalRotation, radianWidth));
+		.unite(buildPieceCircleSweep((capRadius+minClearance+minWidth) * (1.0 + shrinkage), pivotPoint, -1, totalRotation, radianWidth));
 	var top = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
 	top.name = 'top';
 	var bottomFloor = part.clone().subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
 	bottomFloor.name = 'bottom.00';
 	var bottomCeil = bottomFloor.clone();
 	bottomCeil.name = 'bottom.01';
-	var pivotGrooveCeil = buildPieceCircleSweep(pivotRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth);
+	var pivotGrooveCeil = buildPieceCircleSweep((pivotRadius+minClearance) * (1.0 + shrinkage), pivotPoint, -1, totalRotation, radianWidth);
 	pivotGrooveCeil.center = pivotPoint;
 	pivotGrooveCeil.pivot = part.pivot;
 	pivotGrooveCeil.name = 'bottom.02';
 	var pivotGrooveFloor = pivotGrooveCeil.clone();
 	pivotGrooveFloor.name = 'bottom.03';
-	var capGrooveCeil = buildPieceCircleSweep(capRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth);
+	var capGrooveCeil = buildPieceCircleSweep((capRadius+minClearance)  * (1.0 + shrinkage), pivotPoint, -1, totalRotation, radianWidth);
 	capGrooveCeil.center = pivotPoint;
 	capGrooveCeil.pivot = part.pivot;
 	capGrooveCeil.name = 'bottom.04';
 	var capGrooveFloor =capGrooveCeil.clone();
 	capGrooveFloor.name = 'bottom.05';
 	return [
-		[0, bottomFloor],
-		[5, bottomCeil],
-		[5, pivotGrooveCeil],
-		[4, pivotGrooveFloor],
-		[3, capGrooveCeil],
-		[1, capGrooveFloor],
-		[4, pivotFloor],
-		[6, pivotCeil],
-		[7, pivotCapFloor],
-		[8, pivotCapMid],
-		[9, pivotCapCeil]];
+		[0 * minWidth, bottomFloor],
+		[(3 + 2 * minClearance) * minWidth, bottomCeil],
+		[(3 + 2 * minClearance) * minWidth, pivotGrooveCeil],
+		[(2 + 2 * minClearance) * minWidth, pivotGrooveFloor],
+		[(1 + 2 * minClearance) * minWidth, capGrooveCeil],
+		[1 * minWidth, capGrooveFloor],
+		[3 * minWidth, pivotFloor],
+		[(4 + 3 * minClearance) * minWidth, pivotCeil],
+		[(5 + 3 * minClearance) * minWidth, pivotCapFloor]];
 }
 
 window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius, minWidth, minClearance) {
@@ -418,7 +415,7 @@ window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, cap
 		minWidth = 0.02;
 	}
 	if(!minClearance) {
-		minClearance = 0.01;
+		minClearance = 0.02;
 	}
 	var leftLocation = getExtremes(part)
 		.reduce(function(a, b, i, arr) {
@@ -471,7 +468,7 @@ window.annularDisplay = function(t, templatePieces, pieceCount, totalRotation) {
 			var layerId = templatePieces.length + ((i%2) ? groupId + 1: -groupId);
 			var p = templatePieces[j][1].clone();
 			p.name = 'piece-' + i + '-part-' + templatePieces[j][1].name + '-layer-' + layerId;
-			p.parent = displayGroups[layerId];
+			p.parent = displayGroups[layerId.toFixed(0)];
 			if (i%2 == 0) {
 				p.fillColor = j%2 == 0 ? 'rgba(255, 200, 200, 0.5)' : 'rgba(255, 236, 214, 0.5)';
 				p.strokeColor = 'rgba(0, 0, 0, 0.5)';
