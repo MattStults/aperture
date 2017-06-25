@@ -34,20 +34,18 @@ def bool_operation(left, right, op='UNION', delete=True):
 		right.select = True
 		bpy.ops.object.delete()
 
-def constructHull(pieces):
+def constructHull(pieces, nParts):
 	for pieceIdx, layers in pieces.items():
 		categories = [category for category in set([layer.split('.')[0] for layer in layers]) if not category.startswith('_')]
 		for category in categories:
 			bpy.ops.object.select_all(action='DESELECT')
 			bpy.context.scene.objects.active = None
-			for layer in [layer for layer in layers if layer.startswith(category + '.')]:
+			for layer in [layer for layer in layers if layer.startswith(category)]:
 				bpy.context.scene.objects.active = layers[layer]
 				layers[layer].select = True
 			bpy.ops.object.join()
 			connectVertexGroupsEdgeLoops([group for group in bpy.context.scene.objects.active.vertex_groups if group.name.startswith(category + '.')])
 			bpy.context.scene.objects.active.name = category
-			bpy.context.scene.cursor_location = polarCoordinates(0.5, (2 * pi * float(pieceIdx)) / len(pieces)) + (bpy.context.scene.objects.active.location.z,)
-			bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 			cleanupSelectedMesh()
 		rootObject = None
 		for category in categories:
@@ -73,25 +71,46 @@ def cleanupSelectedMesh():
 	bpy.ops.mesh.select_non_manifold()
 	bpy.ops.object.editmode_toggle()
 
-def scaleAllCurves(scaleFactor, dimensions, totalRotation):
+def scaleAllCurves(scaleFactor, dimensions, nCurves, totalRotation):
 	scene = bpy.context.scene
 	pieces = {}
 	for ob in scene.objects:
 		if ob.type == 'CURVE':
 			ob.select = True
-			name_parts = ob.name.split("-")
+			name_parts = ob.name.split(";")
 			pieceIdx = name_parts[1]
 			partIdx = name_parts[5]
 			pieceType = name_parts[3]
 			if pieceIdx not in pieces:
 				pieces[pieceIdx] = {}
 			bpy.ops.transform.resize(value=(scaleFactor * 1/dimensions[0], scaleFactor * 1/dimensions[1], 1))
+			raise Exception(float(partIdx))
 			pieces[pieceIdx][pieceType] = buildPiece(ob, int(pieceIdx), pieceType, float(partIdx) * scaleFactor)
 			ob.select = False
 		else: 
 			ob.select = False
-	bpy.context.scene.objects.active = constructHull(pieces)
-	#animate_part(bpy.context.scene.objects.active, (0,0), totalRotation)
+	template = constructHull(pieces, nCurves)
+	bpy.context.scene.objects.active = template
+	bpy.context.scene.objects.active.location[2] = 0
+	bpy.context.scene.cursor_location = (0,0,0)
+	bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+	bpy.context.scene.objects.active.name = "part"
+	parts = []
+	for partIndex in range(0, nCurves):
+		bpy.ops.object.duplicate_move()
+		bpy.ops.transform.mirror(constraint_axis=(False, False, True))
+		bpy.ops.transform.rotate(value=(2 * pi) / nCurves, axis=(0, 0, 1), constraint_axis=(False, False, True))
+		bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+		parts.append(bpy.context.scene.objects.active)
+	for partIndex, part in enumerate(parts):
+		bpy.ops.object.select_all(action='DESELECT')
+		part.select = True
+		bpy.context.scene.cursor_location = polarCoordinates(0.5 * scaleFactor, (2 * pi * float(partIndex+1)) / nCurves) + (bpy.context.scene.objects.active.location.z,)
+		bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+		animate_part(part, (0,0), totalRotation)
+	bpy.ops.object.select_all(action='DESELECT')
+	template.select = True
+	bpy.ops.object.delete()
 	
 
 def animate_part(part, center, total_rotation):
@@ -115,7 +134,7 @@ def buildPiece(curve, pieceIdx, pieceType, layerIdx):
 	bpy.ops.object.editmode_toggle()
 	bpy.ops.mesh.select_all(action='TOGGLE')
 	curve.vertex_groups.new(name=pieceType)
-	curve.name = pieceType;
+	curve.name = pieceType + "." + str(pieceIdx);
 	bpy.ops.object.vertex_group_assign(True)
 	bpy.ops.object.editmode_toggle()
 	return curve
@@ -159,10 +178,12 @@ High level idea of how to join parts.
 
 bpy.ops.import_curve.svg (filepath="/Users/mattstults/Downloads/aperture.svg");
 doc = minidom.parse("/Users/mattstults/Downloads/aperture.svg")  # parseString also exists
-total_rotation_degrees = float([element.getAttribute('data-paper-data') for element in doc.getElementsByTagName('path') if element.getAttribute('id') == 'scale_circle'][0])
+metadata = [element.getAttribute('data-paper-data') for element in doc.getElementsByTagName('path') if element.getAttribute('id') == 'scale_circle'][0].strip('"').split(';')
+total_rotation_degrees = float(metadata[0])
+n_parts = int(metadata[1])
 doc.unlink()
 circle = bpy.data.objects['scale_circle']
 circle.select = True
 circle_dimensions = circle.dimensions.copy()
 bpy.ops.object.delete()
-scaleAllCurves(50, circle_dimensions, deg2rad(total_rotation_degrees))
+scaleAllCurves(50, circle_dimensions, n_parts, deg2rad(total_rotation_degrees))

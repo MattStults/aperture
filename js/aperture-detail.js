@@ -14,7 +14,7 @@ var buildForBlender = function() {
       fillColor: 'rgba(255, 255, 255, 0.001)',
       strokeColor: 'black',
       strokeWidth: (1 / window.viewing_scale),
-      data: computeRotation(360.0 / nParts),
+      data: computeRotation(360.0 / nParts) + ';' + nParts,
       parent: project.activeLayer
     });
   window.scratchPad.remove();
