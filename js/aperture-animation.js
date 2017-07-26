@@ -3,10 +3,12 @@ var openingTime = 5;
 var totalRotation;
 var pieceCount;
 var pieces;
+var frame;
 
-window.animate = function (templatePieces, nPieces) {
+window.animate = function (templatePieces, annularFrame, nPieces, rotation) {
+	frame = annularFrame;
 	pieceCount = nPieces;
-	totalRotation = window.computeRotation(360.0 / nPieces);
+	totalRotation = rotation;
 	pieces = templatePieces;
 }
 
@@ -16,5 +18,7 @@ function onFrame(event) {
 		t = 1 - t;
 	}
 	project.activeLayer.removeChildren();
+	frame.clone();
+	frame.parent = project.activeLayer;
 	window.annularDisplay(t, pieces, pieceCount, totalRotation);
 }

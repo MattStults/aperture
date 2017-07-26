@@ -33,18 +33,43 @@ window.computeRotation = function (radianWidth) {
 	return offset.angle * 2;
 }
 
-function pathFromPointFunction(fn, granularity) {
-	if (!granularity) {
-		granularity = 10;
-	}
+function parthFromPointFunctionGranularityList(list) {
 	var segments = [];
-	for (i = 0; i < (granularity + 1); i++) {
-		segments.push(fn(i/10.0))
+	var listLength = list.length;
+	for (var i = 0; i < listLength; i++) {
+		var partial = list[i];
+		var fn, granularity;
+		if (!'fn' in partial) {
+			throw {
+				message: 'partial missing function',
+				index: i,
+				partialList: list
+			};
+		}
+		fn = partial.fn;
+		if ('granularity' in partial) {
+			granularity = partial.granularity;
+		} else {
+			granularity = 10.0;
+		}
+		for (var j = 0; j < (granularity + 1); j++) {
+			segments.push(fn(j/granularity))
+		}
 	}
 	var path = new Path({ segments: segments });
 	path.parent = scratchPad;
 	path.smooth();
 	return path;
+}
+
+function pathFromPointFunction(pointFunction, granularity) {
+	var partial = {
+		fn: pointFunction
+	};
+	if (granularity) {
+		partial.granularity = granularity;
+	}
+	return parthFromPointFunctionGranularityList([partial]);
 }
 
 function sweptCircleFromPath(path, radius, scratchGroup) {
@@ -159,6 +184,7 @@ function partOuterEdgeOverlapFunction(totalRotation, radianWidth, idx, scratchGr
 
 function getExtremes(path) {
 	var bounds = new Path.Rectangle(path.bounds);
+	bounds.scale(0.99);
 	bounds.parent = scratchPad;
 	return bounds.getIntersections(path);
 }
@@ -375,12 +401,69 @@ function buildInternalArmLocations(part, pivotArmLength, radianWidth) {
 	};
 }
 
+// Provides a shape representing all possible points that the external
+// pivot arm can by located on and still connect to an external point
+// r distance from the center.
+function buildExternalPivotArmPossibleLocationsShape(radius, totalRotation) {
+	var scale = (radius - 1) / radius;
+	var startingTheta = 0;
+	var endingTheta = Math.PI / 2.0;
+	var part1 = function(t) {
+		var theta = (endingTheta - startingTheta) * t + startingTheta;
+		return new Point(
+			Math.sin(theta) - Math.cos(theta) + scale,
+			Math.cos(theta));
+	};
+	var part3 = function(t) {
+		var theta = endingTheta - (endingTheta - startingTheta) * t;
+		return new Point(
+			-radius,
+			part1(1-t).y);
+	};
+	var part2 = function(t) {
+		return (part3(0) - part1(1)) * t + part1(1);
+	};
+	var part4 = function(t) {
+		return (part1(0) - part3(1)) * t + part3(1);
+	};
+	var halfA = parthFromPointFunctionGranularityList([
+		  {fn: part1, granularity: 30},
+		  {fn: part2, granularity: 100},
+		  {fn: part3, granularity: 30},
+		  {fn: part4, granularity: 10},
+		]);
+	halfA.closed = true;
+	var sweepFunction = buildPiece0GlideFunction(new Point(), totalRotation);
+	var shape = halfA.intersect(halfA.clone().scale(-1,1));
+	var glidePath = pathFromPointFunction(sweepFunction);
+	var glidePathNormal = glidePath.getNormalAt(glidePath.length / 2.0);
+	shape.rotate(glidePathNormal.angle + new Point(0,-1).angle, new Point());
+	shape.simplify(0.001);
+	return {
+		shape: shape,
+		glidePath: glidePath
+	};
+};
+
+function computeExternalArmPivotPoint(pivotRadius, attachmentSurface, externalRadius, totalRotation) {
+	var computedPossibilities =
+	    buildExternalPivotArmPossibleLocationsShape(externalRadius, totalRotation);
+	var possiblePivotsShape = computedPossibilities.shape;
+	var selectableSurface = attachmentSurface.subtract(sweptCircleFromPath(attachmentSurface, pivotRadius));
+	var selectableCenters = possiblePivotsShape.intersect(selectableSurface);
+	var extremes = getExtremes(selectableCenters);
+	return extremes
+		.reduce(function(a, b, i, arr) {
+			return (a.point.y > b.point.y) ? a : b;
+		}).point;
+};
+
 window.buildBlenderPieceLayers = function(part, totalRotation, radianWidth, shrinkage, pivotRadius, capRadius, minFlatWidth, minVerticalWidth, minClearance) {
 	if(!pivotRadius) {
 		pivotRadius = 0.04;
 	}
 	if(!capRadius) {
-		capRadius = 0.05;
+		capRadius = 0.06;
 	}
 	if(!minFlatWidth) {
 		minFlatWidth = 0.02;
@@ -451,6 +534,30 @@ window.buildBlenderPieceLayers = function(part, totalRotation, radianWidth, shri
 	capGrooveCeil.name = 'bottom.08';
 	var capGrooveFloor =capGrooveCeil.clone();
 	capGrooveFloor.name = 'bottom.09';
+
+	var outerSize = 1.1;
+	var externalArmPivotPoint =
+	    computeExternalArmPivotPoint(capRadius, topFloor, outerSize, totalRotation);
+	var externalCapCeil = new Path.Circle({
+		center: externalArmPivotPoint,
+		radius: capRadius * (1.0 - shrinkage),
+		parent: scratchPad,
+		pivot: part.pivot,
+		name: 'external.00'
+	});
+	var externalCapFloor = externalCapCeil.clone();
+	externalCapFloor.name = 'external.01';
+	externalCapFloor.position = externalArmPivotPoint;
+	var externalPivotCeil = new Path.Circle({
+		center: externalArmPivotPoint,
+		radius: pivotRadius * (1.0 - shrinkage),
+		parent: scratchPad,
+		pivot: part.pivot,
+		name: 'external.02'
+	});
+	var externalPivotFloor = externalPivotCeil.clone();
+	externalPivotFloor.name = 'external.03';
+
 	return [
 	    [-(3 + 3 * minClearance) * minVerticalWidth, topFloor],
 	    [-(2 + 3 * minClearance) * minVerticalWidth, topCeil],
@@ -465,139 +572,67 @@ window.buildBlenderPieceLayers = function(part, totalRotation, radianWidth, shri
 		[(-2 * minClearance) * minVerticalWidth, pivotFloor],
 		[(1 + 1 * minClearance) * minVerticalWidth, pivotCeil],
 		[(1 + 1 * minClearance) * minVerticalWidth, pivotCapFloor],
-		[(2 + 1 * minClearance) * minVerticalWidth, pivotCapCeil]];
+		[(2 + 1 * minClearance) * minVerticalWidth, pivotCapCeil],
+		[-(6 + 3 * minClearance) * minVerticalWidth, externalCapCeil],
+	    [-(5 + 3 * minClearance) * minVerticalWidth, externalCapFloor],
+	    [-(4 + 3 * minClearance) * minVerticalWidth, externalPivotCeil],
+	    [-(3 + 2 * minClearance) * minVerticalWidth, externalPivotFloor]];
 }
 
-window.buildPressFitLayers = function(part, totalRotation, radianWidth, pegRadius, capRadius, minFlatWidth, minVerticalWidth, minClearance) {
-	if(!pegRadius) {
-		pegRadius = 0.04;
+function getFrameAttachmentPoint(radianWidth, pivotArmLength, acceptablePivotArmOverlap) {
+	var backupRoom = /*(1 - 2 * pivotArmLength) * Math.tan(Math.PI * radianWidth / 360.0)*/ + 3 * (pivotArmLength - acceptablePivotArmOverlap);
+	return new Point(backupRoom, 1 + pivotArmLength);
+}
+
+function buildPiece0GlideFunction(offsetPoint, totalRotation) {
+	return function pieceGlideFunction(t) {
+		return offsetPoint.rotate(
+			-totalRotation * t,
+			new Point(1, 0)) - new Point(t, 0);
+	};
+}
+
+function getExternalPivotFromTemplate(templatePieces) {
+	for (var i = 0; i < templatePieces.length; i++) {
+		if (templatePieces[i][1].name === "external.00") {
+			return templatePieces[i][1];
+		}
 	}
-	if(!capRadius) {
-		capRadius = 0.08;
-	}
-	if(!minFlatWidth) {
-		minFlatWidth = 0.02;
-	}
-	if(!minVerticalWidth) {
-		minVerticalWidth = 0.02;
-	}
-	if(!minClearance) {
-		minClearance = 0.02;
-	}
-	// The pivot points needs to be far enough from the center that the entire enclosure can fit on one piece.
-	// If it's not big enough we run into an impossible overlap situation.  In order to do this, we create an
-	// nGon with side width = the total diameter we need.  Then we get the radius of the circle that encloses
-	// that nGon.
-	var pivotArmLength = capRadius + minFlatWidth + 2 * minClearance;
-	var nGonRadius = pivotArmLength / Math.sin(Math.PI * radianWidth / 360.0);
-	var pivotArmCircle = new Path.Circle({
+	throw 'no external pieces found';
+}
+
+window.buildAnnularFrame = function(templatePieces, pieceCount, totalRotation) {
+	var frameGroup = new Group();
+	var edge = new Path.Circle({
 		center: new Point(),
-		radius: nGonRadius,
-		parent: scratchPad
-	});
-
-	var leftLocation = pivotArmCircle.getCrossings(part)
-		.reduce(function(a, b, i, arr) {
-			return (a.point.x < b.point.x) ? a : b;
-		}).point;
-	var farLeftLocation = leftLocation.clone();
-	farLeftLocation.angle += radianWidth;
-	var armDirection = (farLeftLocation - leftLocation).normalize();
-	var pivotPoint = leftLocation + armDirection * pivotArmLength;
-	//console.log(capRadius + minFlatWidth + minClearance + extraArmLength);
-	var pivot = new Path.Circle({
-		center: pivotPoint,
-		radius: pegRadius,
-		parent: scratchPad,
-		pivot: part.pivot,
-		name: 'pivot'
-	});
-	var pivotCap = new Path.Circle({
-		center: pivotPoint,
-		radius: capRadius,
-		parent: scratchPad,
-		pivot: part.pivot,
-		name: 'pivot_cap'
-	});
-	var l1Arm = sweptCircleFromPointFunction(function(t) {
-		return leftLocation + (pivotPoint - leftLocation) * t;
-	}, pegRadius + minFlatWidth);
-	part = part.clone()
-		.unite(l1Arm)
-		.unite(buildPieceCircleSweep(capRadius+minClearance+minFlatWidth, pivotPoint, -1, totalRotation, radianWidth));
-	var innerSweep = buildPieceSweep(part,2, totalRotation, radianWidth);
-	var l4 = part.subtract(innerSweep);
-	var outerSweep = buildPieceSweep(part,-2, totalRotation, radianWidth);
-	var l3 = part.clone().subtract(outerSweep);
-	
-	l1 = l3.subtract(buildPieceCircleSweep(pegRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth));
-	l1.name = 'bottom_pivot_groove';
-	var l2 = l1.subtract(buildPieceCircleSweep(capRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth));
-	l2.name = 'bottom_cap_groove';
-	l3.name = 'bottom_cover'
-	l4.name = 'top';
-
-	var intersectSpace = l4.intersect(l3).intersect(l2).intersect(l1);
-	var thinSpace = sweptCircleFromPath(intersectSpace, pegRadius + minFlatWidth);
-	var pegSpace = intersectSpace.subtract(thinSpace);
-	return [[-2, pivotCap], [-1, pivot], [0, l1], [1, l2],[2, l3], [3, l4]/*, [4, pegSpace]*/];
-}
-
-window.buildLayers = function(part, totalRotation, radianWidth, pivotRadius, capRadius, minWidth, minClearance) {
-	if(!pivotRadius) {
-		pivotRadius = 0.04;
+		radius: 1.4,
+		fillColor: 'rgba(0, 255, 0, 0.1)',
+		strokeColor: 'black',
+		strokeWidth: 1/(viewing_scale * 2),
+	}).subtract(new Path.Circle({
+		center: new Point(),
+		radius: 1
+	}));
+	edge = edge.unite(getExternalPivotFromTemplate(templatePieces));
+	var center = new Point();
+	var radianWidth = 360.0 / pieceCount;
+	var attachPointTemplate = getFrameAttachmentPoint(radianWidth, 0.1, 0.01);
+	var sweepFunction = buildPiece0GlideFunction(attachPointTemplate, totalRotation);
+	var sweep = sweptCircleFromPointFunction(sweepFunction, 0.03);
+	for (var i = 0; i < pieceCount; i++) {
+		var sweepInstance = sweep.rotate(-i * radianWidth, center);
+		edge = edge.subtract(sweepInstance);
 	}
-	if(!capRadius) {
-		capRadius = 0.06;
-	}
-	if(!minWidth) {
-		minWidth = 0.02;
-	}
-	if(!minClearance) {
-		minClearance = 0.02;
-	}
-	var leftLocation = getExtremes(part)
-		.reduce(function(a, b, i, arr) {
-			return (a.point.x < b.point.x) ? a : b;
-		});
-	var pivotPoint = leftLocation.point + leftLocation.normal * (capRadius + minWidth + minClearance);
-	var pivot = new Path.Circle({
-		center: pivotPoint,
-		radius: pivotRadius,
-		parent: scratchPad,
-		pivot: part.pivot,
-		name: 'pivot'
-	});
-	var pivotCap = new Path.Circle({
-		center: pivotPoint,
-		radius: capRadius,
-		parent: scratchPad,
-		pivot: part.pivot,
-		name: 'pivot_cap'
-	});
-	var l1Arm = sweptCircleFromPointFunction(function(t) {
-		return leftLocation.point + (pivotPoint - leftLocation.point) * t;
-	}, pivotRadius);
-	part = part.clone()
-		.unite(l1Arm)
-		.unite(buildPieceCircleSweep(capRadius+minClearance+minWidth, pivotPoint, -1, totalRotation, radianWidth));
-	var l4 = part.subtract(buildPieceSweep(part,2, totalRotation, radianWidth));
-	var l3 = part.clone().subtract(buildPieceSweep(part,-2, totalRotation, radianWidth));
-	var pivotGroove = buildPieceCircleSweep(pivotRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth);
-	l1 = l3.subtract(pivotGroove);
-	l1.name = 'bottom_pivot_groove';
-	var l2 = l1.subtract(buildPieceCircleSweep(capRadius+minClearance, pivotPoint, -1, totalRotation, radianWidth));
-	l2.name = 'bottom_cap_groove';
-	l3.name = 'bottom_cover'
-	l4.name = 'top';
-	return [[-2, pivotCap], [-1, pivot], [0, l1], [1, l2],[2, l3], [3, l4]];
+	edge.parent = frameGroup;
+	return frameGroup;
 }
 
 window.annularDisplay = function(t, templatePieces, pieceCount, totalRotation) {
 	var displayGroups = [];
 	for (var i = 0; i < 2*(templatePieces.length); i++) {
-		displayGroups[i] = new Group();
-		displayGroups[i].name = 'depth_layer_' + i;
+		var idx = (2*(templatePieces.length) - i - 1);
+		displayGroups[idx] = new Group();
+		displayGroups[idx].name = 'depth_layer_' + idx;
 	}
 	var center = new Point();
 	var radianWidth = 360.0 / pieceCount;
